@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- Bootstrap CSS -->
+    <link href="css/bootstrap.min.css" rel="stylesheet">
+
+    <title>Detetive</title>
+</head>
+<body>
+<div class="container">
+    <div class="col-12" style="text-align: center;">
+        Seu número é: <span id="mnmb" style="font-weight: bold">0000</span>
+        <br>Sala: <span id="mroom" style="font-weight: bold">00000</span>
+        <br><button type="button" onclick="exitGame();" class="btn btn-primary mt-4">Sair da partida</button>
+    </div>
+    <div class="row" style="border: solid;padding: 15px;margin: 20px 10px 0px 10px;">
+        <div class="col-12 col-sm-6">
+            <h4>Palpites</h4>
+            <ul class="list-group guess list-group-flush" style="height: 163px; overflow: auto;">
+            </ul>
+        </div>
+    </div>
+    <div class="row" style="border: solid;padding: 15px;margin: 20px 10px 0px 10px;">
+        <div class="col-12 col-sm-6">
+            <h4>Últimos acontecimentos</h4>
+            <ul class="list-group console list-group-flush" style="height: 163px; overflow: auto;">
+            </ul>
+        </div>
+    </div>
+    <div class="row" style="position: fixed;bottom: 0;left: 0;right: 0;margin-left: 15px;margin-right: 15px;">
+        <div class="col-12">
+            <div class="input-group mb-3">
+                <input type="number" id="tinput" class="form-control" placeholder="Sua tentantiva...">
+                <button class="btn btn-outline-secondary" onclick="sendGuess()" type="button" id="send">Enviar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="startGame" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exampleModalLabel">Menu</h5>
+            </div>
+            <div class="modal-body">
+                <div class="input-group mb-3">
+                    <input type="text" class="form-control" id="cname" placeholder="Seu nome...">
+                </div>
+                <div class="input-group mb-3">
+                    <input type="number" class="form-control" id="cnmb" placeholder="Número...">
+                    <button class="btn btn-outline-secondary" onclick="validate('doCreateRoom')" type="button">Criar sala</button>
+                </div>
+                <hr>
+                <small>Preencha abaixo para entrar na sala.</small>
+                <div class="input-group mb-3">
+                    <input type="number" class="form-control" id="room_id" placeholder="Número da sala">
+                    <button class="btn btn-outline-secondary" onclick="validate('doEnterRoom')" type="button">Entrar na sala</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Optional JavaScript; choose one of the two! -->
+
+<!-- Option 1: Bootstrap Bundle with Popper -->
+<script src="js/jquery-3.6.0.min.js"></script>
+<script src="js/bootstrap.bundle.min.js"></script>
+
+
+<script>
+    var room_id = 0;
+    var interval = null;
+
+    $("document").ready(function() {
+        if (localStorage.getItem('room_id') && localStorage.getItem('index')) {
+            inProgress();
+        } else {
+            startGame();
+        }
+    });
+
+    function inProgress() {
+        $(".guess").html('');
+        $(".console").html('');
+        $('#startGame').modal('hide');
+        builderRoom();
+        interval = setInterval(function() {
+            builderRoom();
+        }, 10000);
+    }
+
+    function startGame() {
+        localStorage.clear();
+        $('#startGame').modal('show');
+    }
+
+    function exitGame() {
+        var a = confirm('Você realmente quer sair da partida?')
+        if (a === true) {
+            $.ajax({
+                url:"exit.php",
+                method: "POST",
+                data: {
+                    room_id: localStorage.getItem('room_id'),
+                    index: localStorage.getItem('index')
+                }
+            })
+            .done(function(result) {
+                if (result.success) {
+                    clearInterval(interval);
+                    $(".guess").html('');
+                    $(".console").html('');
+                    alert('Você desistiu da partida.');
+                    startGame();
+                } else {
+                    alert(result.msg);
+                }
+            });
+        }
+    }
+
+    function doCreateRoom() {
+        var name = $("#cname").val();
+        var nmb = $("#cnmb").val();
+
+        var scheme = {
+            "end_game": 0,
+            "players": [
+                {
+                    "winner": 0,
+                    "name": name,
+                    "has_lose": 0,
+                    "nmb": nmb,
+                    "my_turn": 1,
+                    "guess": [],
+                }
+            ],
+            "console": [name+" criou a sala."]
+        };
+
+        $.ajax({
+            url:"start.php",
+            method: "POST",
+            data: {
+                scheme:JSON.stringify(scheme)
+            }
+        })
+        .done(function(result) {
+            if (result.success) {
+                localStorage.setItem("room_id", result.room_id);
+                localStorage.setItem("index", result.index);
+                alert("Jogo criado com sucesso: "+result.room_id);
+                $("#mnmb").html($("#cnmb").val());
+                $("#mroom").html(result.room_id);
+                $("#cname").val('');
+                $("#cnmb").val('');
+                $("#room_id").val('');
+
+                inProgress();
+            } else {
+                alert(result.msg);
+            }
+        });
+    }
+
+    function sendGuess() {
+        if ($('#tinput').val() == '') {
+            return alert("Você precisa informar o palpite.");
+        } else if ($('#tinput').val().length != 4) {
+            return alert("Você precisa informar o palpite.");
+        }
+
+
+        $('#send').removeAttr('onclick');
+
+        $.ajax({
+            url:"guess.php",
+            method: "POST",
+            data: {
+                room_id:localStorage.getItem("room_id"),
+                index:localStorage.getItem("index"),
+                guess:$('#tinput').val()
+            }
+        })
+        .done(function(result) {
+            if (result.success) {
+                if (result.server) {
+                    alert(result.msg);
+                    return;
+                }
+
+                $("#mnmb").html(result.mnmb);
+                $("#mroom").html(result.room_id);
+
+                $('#tinput').attr('disabled', 'disabled');
+                $('#tinput').val('');
+
+                $(".guess").html('');
+                var guess = '';
+                result.guess.forEach(function(gs) {
+                    guess += `<li className="list-group-item">${gs}</li>`;
+                })
+                $(".guess").html(guess);
+
+                $(".console").html('');
+                var console = '';
+                result.console.forEach(function(cs) {
+                    console += `<li className="list-group-item">${cs}</li>`;
+                })
+                $(".console").html(console);
+
+                $('.guess').scrollTop($('.guess')[0].scrollHeight);
+                $('.console').scrollTop($('.console')[0].scrollHeight);
+            } else {
+                clearInterval(interval);
+                alert(result.msg);
+                startGame();
+            }
+        });
+    }
+
+    function builderRoom() {
+        $.ajax({
+            url:"progress.php",
+            method: "POST",
+            data: {
+                room_id:localStorage.getItem("room_id"),
+                index:localStorage.getItem("index")
+            }
+        })
+        .done(function(result) {
+            if (result.success) {
+                $("#mnmb").html(result.mnmb);
+                $("#mroom").html(result.room_id);
+
+                if (result.my_turn == 1) {
+                    $('#tinput').removeAttr('disabled');
+                    $('#send').attr('onclick', 'sendGuess()');
+                } else {
+                    $('#tinput').attr('disabled', 'disabled');
+                    $('#send').removeAttr('onclick');
+                }
+
+                $(".guess").html('');
+                var guess = '';
+                result.guess.forEach(function(gs) {
+                    guess += `<li className="list-group-item">${gs}</li>`;
+                })
+                $(".guess").html(guess);
+
+                $(".console").html('');
+                var console = '';
+                result.console.forEach(function(cs) {
+                    console += `<li className="list-group-item">${cs}</li>`;
+                })
+                $(".console").html(console);
+
+                $('.guess').scrollTop($('.guess')[0].scrollHeight);
+                $('.console').scrollTop($('.console')[0].scrollHeight);
+            } else {
+                clearInterval(interval);
+                alert(result.msg);
+                startGame();
+            }
+        });
+    }
+
+    function doEnterRoom() {
+        if ($("#room_id").val() == "") {
+            return alert("Por favor, preencha o número da sala.");
+        }
+        $.ajax({
+            url:"enter.php",
+            method: "POST",
+            data: {
+                room_id: $('#room_id').val(),
+                player:JSON.stringify({
+                    "winner": 0,
+                    "name": $("#cname").val(),
+                    "has_lose": 0,
+                    "nmb": $("#cnmb").val(),
+                    "my_turn": 0,
+                    "guess": [],
+                })
+            }
+        })
+        .done(function(result) {
+            if (result.success) {
+                localStorage.setItem("room_id", result.room_id);
+                localStorage.setItem("index", result.index);
+                alert("Entrou na sala: "+result.room_id);
+                $("#cname").val('');
+                $("#cnmb").val('');
+                $("#room_id").val('');
+
+                inProgress();
+            } else {
+                alert(result.msg);
+            }
+        });
+    }
+
+    function validate(method) {
+        if ($("#cname").val() == "") {
+            return alert("Por favor, preencha seu nome.");
+        } else if ($("#cnmb").val() == "") {
+            return alert("Por favor, preencha seu número.");
+        } else if ($("#cnmb").val().length != 4) {
+            return alert("Precisa ser 4 números.");
+        } else {
+            window[method]();
+        }
+    }
+
+</script>
+
+</body>
+</html>
